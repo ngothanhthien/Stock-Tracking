@@ -35,11 +35,7 @@ def insert_price_record(code: str, length: Optional[PriceLength], price_info: Pr
         query['length'] = length
 
     query = Query().fragment(query)
-    record = db.table('prices').search(query)
-    if record:
-        db.table('prices').update(price_record, query)
-    else:
-        db.table('prices').insert(price_record)
+    db.table('prices').update(price_record, query)
 
     return price_record
 
@@ -63,3 +59,14 @@ def record_expired(record: dict | None) -> bool:
     if not expiry:
         return False
     return expiry < now()
+
+
+def get_stock_account_id_record() -> int | None:
+    account_id = db.table('settings').search(Query().name == 'account_id')
+    if account_id:
+        account_id = account_id[0]['value']
+    return account_id
+
+
+def insert_stock_account_id_record(account_id: int) -> None:
+    db.table('settings').update({'name': 'account_id', 'value': account_id}, Query().name == 'account_id')

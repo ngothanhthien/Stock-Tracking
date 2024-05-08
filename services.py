@@ -4,15 +4,15 @@ from typing import Literal
 from tinydb import Query
 
 from constant import TIME_OUT, get_url
-from db import db, insert_price_record, get_price_record
-from auth import get_auth_token
+from db import db, insert_price_record, get_price_record, get_stock_account_id_record, insert_stock_account_id_record
+from auth import get_auth_headers
 from utils import convert_date_to_timestamp, now, expiry_plus
-from type import PriceRecord, PriceReturn
+from type import PriceRecord, PriceReturn, OwnStock, PriceLength
 
 
 def fetch_watch_list() -> set[str]:
     url = get_url('watch_list', auth=True)
-    headers = {'Authorization': f'Bearer {get_auth_token()}'}
+    headers = get_auth_headers()
     response = requests.get(url, headers=headers, timeout=TIME_OUT)
     parsed = response.json()
     watch_lists = parsed.get('d', [])
@@ -133,20 +133,7 @@ def get_last_price(code: str) -> float:
     return last_price['price']
 
 
-def fetch_min_max_price(code: str, length: Literal['3M', '1Y']) -> tuple[PriceReturn, PriceReturn]:
-    """
-    Fetches and calculates the minimum and maximum price data from an API for a given code and length.
-
-    Args:
-    - code: The code identifier for the price data.
-    - length: The time span of the price data ('3M' for three months, '1Y' for one year).
-
-    Returns:
-    - A tuple of dictionaries containing the min and max price information with their respective expiry dates.
-
-    Raises:
-    - ValueError: If the API response is invalid or lacks necessary data.
-    """
+def fetch_min_max_price(code: str, length: Literal['3M', '1Y', '3Y']) -> tuple[PriceReturn, PriceReturn]:
     url = get_url('price_chart').format(code=code, type=length)
     response = requests.get(url, timeout=TIME_OUT)
     parsed = response.json()
@@ -181,17 +168,7 @@ def fetch_min_max_price(code: str, length: Literal['3M', '1Y']) -> tuple[PriceRe
     return min_price, max_price
 
 
-def get_min_max_price(code: str, length: Literal['3M', '1Y']) -> tuple[float, float]:
-    """Fetches the minimum and maximum price records from the database for a given code and length.
-    If the prices are expired or there are no current records, fetches new data and updates the database.
-
-    Args:
-    - code: The item's code.
-    - length: The duration for the price data ('3M' or '1Y').
-
-    Returns:
-    - A tuple containing dictionaries for the minimum and maximum prices
-    """
+def get_min_max_price(code: str, length: Literal['3M', '1Y', '3Y']) -> tuple[float, float]:
     min_price: PriceRecord = get_price_record(code, 'min', length)
     max_price: PriceRecord = get_price_record(code, 'max', length)
     if not min_price or not max_price:
@@ -206,3 +183,71 @@ def get_min_max_price(code: str, length: Literal['3M', '1Y']) -> tuple[float, fl
 
 def format_price(price: float) -> float:
     return round(price / 1000, 2)
+
+
+def fetch_account_id() -> int:
+    url = get_url('account_list', auth=True)
+    headers = get_auth_headers()
+    res = requests.get(url, headers=headers, timeout=TIME_OUT)
+    parsed = res.json()
+    accounts = parsed.get('d')
+    if not bool(accounts):
+        raise ValueError("Invalid response")
+    stock_account_id = None
+    for account in accounts:
+        product_type = account.get('producttype')
+        if product_type == 'NN':
+            stock_account_id = account.get('id')
+    if not stock_account_id:
+        raise ValueError("Invalid response")
+
+    insert_stock_account_id_record(stock_account_id)
+    return stock_account_id
+
+def get_stock_account_id() -> int | None:
+    account_id = get_stock_account_id_record()
+    if not account_id:
+        account_id = fetch_account_id()
+
+    return account_id
+
+
+def fetch_and_save_own_list() -> list[OwnStock]:
+    url = get_url('own_list', auth=True).format(account_id=get_stock_account_id())
+    headers = get_auth_headers()
+    response = requests.get(url, headers=headers, timeout=TIME_OUT)
+    parsed = response.json()
+    data = parsed.get('d', [])
+    if not bool(data):
+        raise ValueError("Invalid response")
+    own_list = []
+    for item in data:
+        code = item.get('symbol')
+        total = item.get('total')
+        available = item.get('trade')
+        buy_price = item.get('costPrice')
+        if not code or not total or not available or not buy_price:
+            raise ValueError("Invalid response")
+        own_stock: OwnStock = {
+            'code': code,
+            'total': total,
+            'available': available,
+            'buy_price': format_price(buy_price)
+        }
+        own_list.append(own_stock)
+
+    db.table('settings').update({'name': 'own_list', 'value': own_list, 'expiry': now() + expiry_plus('end_day')})
+    return own_list
+
+def get_own_list() -> list[OwnStock]:
+    own_list = db.table('settings').search(Query().name == 'own_list')
+    if not own_list:
+        own_list = fetch_and_save_own_list()
+    else:
+        own_list = own_list[0]['value']
+    return own_list
+
+
+if __name__ == '__main__':
+    print(get_root_price('VNM'))
+    pass

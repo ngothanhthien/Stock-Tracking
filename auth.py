@@ -29,3 +29,7 @@ def fetch_auth_token() -> AuthToken:
         raise ValueError("Invalid response")
 
     return {'token': access_token, 'expiry': expires_in + now()}
+
+
+def get_auth_headers() -> dict:
+    return {'Authorization': f'Bearer {get_auth_token()}'}

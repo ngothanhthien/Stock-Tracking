@@ -17,7 +17,9 @@ API_URL = {
     'login': "/auth/token",
 }
 REQUIRED_AUTH = {
-    'watch_list': '/flex/userdata/watchlists'
+    'watch_list': '/flex/userdata/watchlists',
+    'own_list': '/flex/inq/accounts/{account_id}/securitiesPortfolio',
+    'account_list': '/flex/accountsAll',
 }
 CHART_TYPE = {
     '1W': '1W',

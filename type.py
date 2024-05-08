@@ -7,7 +7,7 @@ class AuthToken(TypedDict):
 
 
 PriceType = Literal['min', 'max', 'current', 'last', 'root', 'sub root']
-PriceLength = Literal['3M', '1Y']
+PriceLength = Literal['3M', '1Y', '3Y', '1M']
 
 
 class PriceRecord(TypedDict):
@@ -16,6 +16,13 @@ class PriceRecord(TypedDict):
     type: PriceType
     expiry: int | None
     length: Optional[PriceLength]
+
+
+class OwnStock(TypedDict):
+    code: str
+    total: int
+    available: float
+    buy_price: float
 
 
 class PriceReturn(TypedDict):

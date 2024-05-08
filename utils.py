@@ -22,13 +22,19 @@ def convert_date_to_timestamp(date: str) -> int:
     return int(datetime_obj.timestamp())
 
 
-def expiry_plus(length: Literal['3M', '1Y', 'end_day']) -> int:
+def expiry_plus(length: Literal['3M', '1Y', 'end_day', '3Y', '1M']) -> int:
     if length == '3M':
-        return 90 * 24 * 3600
-    if length == '1Y':
-        return 365 * 24 * 3600
-    if length == 'end_day':
+        expiry = 90 * 24 * 3600
+    elif length == '1Y':
+        expiry = 365 * 24 * 3600
+    elif length == 'end_day':
         current = datetime.now()
         end_day = datetime(current.year, current.month, current.day, 23, 59, 59)
-        return int((end_day - current).total_seconds())
-    raise ValueError("Invalid length")
+        expiry = int((end_day - current).total_seconds())
+    elif length == '3Y':
+        expiry = 3 * 365 * 24 * 3600
+    elif length == '1M':
+        expiry = 30 * 24 * 3600
+    else:
+        raise ValueError("Invalid length")
+    return expiry
