@@ -6,7 +6,6 @@ from discord.ext import commands, tasks
 from constant import DISCORD_BOT_TOKEN, DISCORD_TEST_CHANNEL_ID
 from services import get_root_price, get_last_price, get_min_max_price, get_watch_list, get_own_list
 from db import init_db
-from type import OwnStock
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -55,7 +54,7 @@ def direction_percent(root: float, sub: float, option=None) -> str:
     return f'{root_text}{full_percent_text}'
 
 
-async def print_table_to_discord(table: list[dict[str, str]], title) -> None:
+async def print_table_to_discord(table: list[dict[str, str]], title, channel=None) -> None:
     column_widths = {}
     label = table[0].keys()
     for key in label:
@@ -72,11 +71,12 @@ async def print_table_to_discord(table: list[dict[str, str]], title) -> None:
         data_text += row + "\n"
 
     data_text += "```"
-    channel = bot.get_channel(int(DISCORD_TEST_CHANNEL_ID))
+    if not channel:
+        channel = bot.get_channel(int(DISCORD_TEST_CHANNEL_ID))
     await channel.send(data_text)
 
 
-async def show_summary(watch_list: list[str]) -> None:
+async def show_summary(channel=None) -> None:
     table = []
     option = {
         'prefix': False,
@@ -85,7 +85,7 @@ async def show_summary(watch_list: list[str]) -> None:
         'down_color': 'red',
         'with_root': True
     }
-    for code in watch_list:
+    for code in get_watch_list():
         root_price = get_root_price(code)
         last_price = get_last_price(code)
         min_price_3m, max_price_3m = get_min_max_price(code, '3M')
@@ -101,10 +101,10 @@ async def show_summary(watch_list: list[str]) -> None:
             'Max 3Y': direction_percent(max_price_3y, last_price, option),
             'Min 3Y': min_price_3y,
         })
-    await print_table_to_discord(table, summary_title())
+    await print_table_to_discord(table, summary_title(), channel)
 
 
-async def show_own_list(own_list: list[OwnStock]) -> None:
+async def show_own_list(channel=None) -> None:
     table = []
     option = {
         'prefix': False,
@@ -112,7 +112,7 @@ async def show_own_list(own_list: list[OwnStock]) -> None:
         'down_color': 'red',
         'with_root': True
     }
-    for stock in own_list:
+    for stock in get_own_list():
         code = stock['code']
         buy_at = stock['buy_price']
         root_price = get_root_price(code)
@@ -130,7 +130,7 @@ async def show_own_list(own_list: list[OwnStock]) -> None:
             'Max 1Y': direction_percent(max_price_1y, buy_at, option),
             'Max 3Y': direction_percent(max_price_3y, buy_at, option),
         })
-    await print_table_to_discord(table, own_list_title())
+    await print_table_to_discord(table, own_list_title(), channel)
 
 
 def format_color(string: str, color: str) -> str:
@@ -171,19 +171,39 @@ def own_list_title() -> str:
 """
 
 
+async def check_owner(ctx) -> bool:
+    if not (ctx.guild and ctx.author.id == ctx.guild.owner_id):
+        await ctx.send("Permission denied.")
+        return False
+    return True
+
+
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
     init_db()
-    watch_list = get_watch_list()
-    await show_summary(watch_list)
-    own_list = get_own_list()
-    await show_own_list(own_list)
+    # await show_summary()
+    # await show_own_list()
 
 
 @bot.command()
 async def ping(ctx):
-    await ctx.send('Pong!')
+    if await check_owner(ctx):
+        await ctx.send('Pong!')
+
+
+@bot.command(
+    aliases=['show_o', 'sol', 'show_own']
+)
+async def c_show_own_list(ctx):
+    await show_own_list(ctx)
+
+
+@bot.command(
+    aliases=['show_sm', 'ssl']
+)
+async def c_show_summary(ctx):
+    await show_summary(ctx)
 
 
 bot.run(DISCORD_BOT_TOKEN)
